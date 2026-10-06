@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_context-graph_context-graph__(context_pack|locate|grep|read_file|deps|path|repo_map|index_status)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"context-graph read-only tool: it only reads files inside the project and its own index\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

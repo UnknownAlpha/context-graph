@@ -1,0 +1,8 @@
+{
+ "decay": 0.3,
+ "hops": 1,
+ "body_weight": 0.5,
+ "structured_boost": 2.0,
+ "common_penalty": 1.0,
+ "rationale_weight": 0.5
+}

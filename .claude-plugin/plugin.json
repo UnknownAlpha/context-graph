@@ -1,0 +1,31 @@
+{
+  "name": "context-graph",
+  "displayName": "Context Graph",
+  "version": "0.1.0",
+  "description": "Knowledge-graph context for any repo: one tool call returns the map, the files that matter and sliced reads, so Claude answers with ~6k tokens of context and verifiable file:line citations.",
+  "author": {
+    "name": "Muhammad Talha"
+  },
+  "keywords": [
+    "knowledge-graph",
+    "context",
+    "repository",
+    "tree-sitter",
+    "mcp"
+  ],
+  "mcpServers": {
+    "context-graph": {
+      "command": "bash",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/context-graph-mcp.sh"
+      ],
+      "env": {
+        "CONTEXT_GRAPH_REPO": "${CLAUDE_PROJECT_DIR}",
+        "CONTEXT_GRAPH_ROOT": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    }
+  },
+  "license": "Proprietary",
+  "homepage": "https://github.com/UnknownAlpha/context-graph",
+  "repository": "https://github.com/UnknownAlpha/context-graph"
+}

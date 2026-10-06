@@ -1,0 +1,35 @@
+[project]
+name = "context-graph"
+version = "0.1.0"
+description = "Knowledge-graph context pipeline for repositories: locate, slice, verify. MCP server, CLI and OpenAI-compatible endpoint."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "networkx>=3.3",
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "tree-sitter>=0.23",
+    "tree-sitter-language-pack>=0.6",
+    "mcp>=1.2",
+    "openai>=1.50",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+
+[project.scripts]
+context-graph-mcp = "mcp_server:main"
+context-graph = "agent:main"
+context-graph-serve = "server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "agent.py", "common.py", "config.py", "eval.py", "graphify_locator.py", "ingest.py",
+    "mcp_server.py", "server.py", "tools.py", "treesitter_locator.py", "tune.py", "compare.py",
+    "params.json", "cases.json",
+]

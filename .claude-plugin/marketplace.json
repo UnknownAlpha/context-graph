@@ -1,0 +1,13 @@
+{
+  "name": "context-graph",
+  "owner": { "name": "Muhammad Talha" },
+  "description": "Knowledge-graph context pipeline for repositories.",
+  "plugins": [
+    {
+      "name": "context-graph",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "One tool call returns a budgeted context pack for the current repo: map, ranked files, sliced reads, graph queries."
+    }
+  ]
+}
