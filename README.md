@@ -1,173 +1,160 @@
 # context-graph
 
-Points a model at the few files that matter in a repo, then lets it read them.
-Two locators, a GLM runner with three modes, an eval harness, an OpenAI-compatible server, and a Claude Code
-plugin. Everything runs in WSL:
+A knowledge graph over a repository that gives a model the few files that matter, in about 6k tokens, with
+`file:line` citations it can be held to. Works with any model: as a Claude Code plugin it uses whatever model
+Claude Code is configured for; the standalone tools talk to any OpenAI-compatible endpoint.
 
-```bash
-cd ~/tasks/context-graph
-```
+## Claude Code plugin
 
-## Claude Code plugin (fastest way to use it)
+Requirements on the machine: Claude Code, `git`, and `uv` (or `python3`; the launcher falls back to a venv and
+pip). Nothing else. The first launch installs the Python dependencies into the plugin folder, about a minute;
+later launches are instant.
 
-This directory is a Claude Code plugin. It needs `uv` on the machine (or `python3`; the launcher falls back to a
-venv and pip) and nothing else. First launch installs the Python dependencies into `.venv` here, later launches are
-instant.
-
-Try it for one session, from any repo:
-
-```bash
-claude --plugin-dir ~/tasks/context-graph
-```
-
-Install it for every session:
+Install for every session:
 
 ```bash
 claude plugin marketplace add UnknownAlpha/context-graph
 claude plugin install context-graph@context-graph
 ```
 
-Then in any project:
+Or try it once from a checkout: `claude --plugin-dir /path/to/context-graph`.
+
+Then, inside any project:
 
 ```
 /ctx why does the quota dot never turn green after a tenant is committed?
 /ctx how does index.html reach the ResourceQuota template?
 /ctx what breaks if I rename tenant_status in app.py?
-/ctx ingest https://github.com/kubernetes-sigs/kustomize     # clones into .ctx/workspaces and registers it
-/ctx @kustomize how is a strategic merge patch applied?      # ask about an ingested repo
+/ctx what is this project?
+/ctx ingest https://github.com/kubernetes-sigs/kustomize     # make another repo available
+/ctx @kustomize how is a strategic merge patch applied?      # ask about it
 /ctx targets                                                 # what is indexed
 ```
 
-Several repos at once: the project you started Claude Code in is always the default. `ingest` attaches a repo
-without changing that. Name a target with `@slug`, or just mention it in the question (its slug or a file path
-that exists only there) and the tools route to it. Every tool result starts with `[repo: <slug>]` so a wrong guess
-is visible.
+What happens: the `context_pack` tool returns the one-page map of the repo, the files the graph ranks highest for
+the question, and numbered slices around the matched symbols in the top three, in one call. The model answers
+from that with `file:line` citations and reads more only if something is missing. `path` and `deps` answer "how
+does A reach B" and "what depends on X" from the graph directly. The index lives in `.repomap/` inside the
+project (add it to `.gitignore`) and rebuilds itself when files change. Nothing leaves the machine except the
+prompt Claude Code sends to its model.
 
-Where things live: clones go to a per-user store, `~/.local/share/context-graph/workspaces` (or `$CONTEXT_GRAPH_STORE`,
-or the plugin data dir Claude Code provides), once per URL, with the index inside each clone. A project records
-which clones it uses in `.ctx/registry.json`, which ignores itself in git. So ingesting a URL a second project
-already has takes a second and no disk. `/ctx targets all` shows the store with sizes; `/ctx forget <slug>`
-detaches a repo from the current project; `/ctx prune` lists clones no project uses and `/ctx prune apply`
-deletes them. `ingest ... local` keeps a clone inside the project's `.ctx/workspaces` instead, for a fully
-self-contained folder.
+### Several repos at once
 
-What happens: the `context_pack` MCP tool returns the one-page map, the files the knowledge graph ranks highest and
-numbered slices around the matched symbols, about 6k tokens, in one call. Claude answers from that with
-`file:line` citations and only reads more if something is missing. `path` and `deps` answer "how does A reach B"
-and "what depends on X" from the graph directly. The index lives in `.repomap/` inside the project (add it to
-`.gitignore`) and rebuilds itself when files change. Nothing leaves the machine except the prompt to whichever
-model Claude Code is configured to use.
+The project you started Claude Code in is always the default. `ingest <url or path>` makes another repo
+available without changing that: clones go to a per-user store (`~/.local/share/context-graph/workspaces`, or
+`$CONTEXT_GRAPH_STORE`), once per URL, so a second project that ingests the same URL attaches in a second with no
+new download. Name a target with `@slug`, or mention it in the question (its slug, or a file path that exists only
+there) and the tools route to it. Every tool result starts with `[repo: <slug>]`.
 
-Tools exposed: `context_pack`, `locate`, `read_file`, `grep`, `deps`, `path`, `repo_map`, `ingest`, `index_status`.
+- `/ctx targets all` shows the shared store with sizes and which projects use each clone.
+- `/ctx forget <slug>` detaches a repo from the current project; the clone stays for other projects.
+- `/ctx prune` lists clones no project uses; `/ctx prune apply` deletes them.
+- `/ctx ingest <url> local` clones into the project's own `.ctx/workspaces` instead, for a self-contained folder.
 
-Auto mode: Claude Code's auto-mode classifier may block MCP tools it cannot evaluate. The plugin ships a PreToolUse hook
-that pre-approves its read-only tools. If a tool is still blocked, add this once under `/permissions` (or
-`permissions.allow` in `~/.claude/settings.json`), using the plugin-scoped server name:
+A project's attachments are recorded in `.ctx/registry.json`, which ignores itself in git.
+
+### Permissions
+
+Tools: `context_pack`, `locate`, `read_file`, `grep`, `deps`, `path`, `repo_map`, `index_status`, `targets`,
+`ingest`, `forget`, `prune`. All but the last three only read. The plugin ships a hook that pre-approves the
+read-only tools. If Claude Code's auto mode still blocks one, allow the server once under `/permissions`:
 
 ```
 mcp__plugin_context-graph_context-graph
 ```
 
-## Setup
+The plugin runs a Python MCP server with your user's privileges, as every plugin with an MCP server does; the
+source is in this repository.
+
+## Standalone use with any model
+
+Everything the plugin does is also available without Claude Code, against any OpenAI-compatible chat endpoint:
+vLLM, Ollama, LiteLLM, OpenAI, OpenRouter, Zhipu, llama.cpp server and others.
 
 ```bash
-cp .env.example .env      # fill in GLM_BASE_URL (ends in /v1), GLM_API_KEY, GLM_MODEL
-.venv/bin/python -c "import config; print(config.client().models.list().data[0].id)"   # smoke test
+git clone https://github.com/UnknownAlpha/context-graph && cd context-graph
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[server]"
+cp .env.example .env     # MODEL_BASE_URL (ends in /v1), MODEL_API_KEY, MODEL_NAME; see the file for examples
+.venv/bin/python -c "import config; print(config.describe()); print([m.id for m in config.client().models.list().data][:5])"
 ```
 
-Build the locators for a repo (no GLM needed, runs in well under a second; rerun after commits):
+`MODEL_API_KEY` may be a key, `none` for servers without auth, or `cmd:<command>` to obtain it from a command at
+startup (for example `cmd:oc whoami -t` for an OpenShift AI route). `MODEL_FAST` names a cheaper model for
+classification and judging. `MODEL_EXTRA_BODY` is JSON merged into every request for provider-specific knobs, such
+as turning a reasoning model's thinking off. Claude Code's `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and
+`ANTHROPIC_MODEL` are read as fallbacks when they point at a proxy that also serves `/v1/chat/completions`.
+
+### Ask questions from the command line
 
 ```bash
-.venv/bin/python graphify_locator.py build ~/tasks/ocp-tenant-provisioning     # needs graphify-out/graph.json
-.venv/bin/python treesitter_locator.py build ~/tasks/ocp-tenant-provisioning   # no graphify needed
+.venv/bin/python agent.py <repo> "why does the quota dot never turn green" --mode auto
+.venv/bin/python agent.py <repo> "<question>" --all-modes          # compare modes side by side
+.venv/bin/python agent.py <repo> --chat --mode auto                # interactive; /mode, /reset, /quit
 ```
 
-## Chat endpoint (OpenAI-compatible)
+Modes: `auto` (default: one call on graph-selected slices, escalating to a capped tool loop only if the answer
+hedges), `single` (one call, no escalation), `agent` (map plus tools, model drives), `grep-agent` (same without
+the graph, as a control). Every run writes a transcript under `runs/` with tool calls, files read, tokens, time
+and a citation check.
+
+### OpenAI-compatible endpoint
 
 ```bash
-.venv/bin/python server.py --port 8765        # from a terminal logged into the model's cluster if GLM_API_KEY=oc
+.venv/bin/python server.py --port 8765
 ```
 
-Point any OpenAI client at `http://127.0.0.1:8765/v1` (any API key). First message: paste a git URL, with or
-without a question. The server clones it into `workspaces/<owner-repo>` (shallow), builds the graph in seconds,
-and answers. Later messages in the same conversation keep working on that repo; the client sends the history.
-Or set the model to an indexed workspace name (`GET /v1/models` lists them) and skip the URL.
+Point any OpenAI client at `http://127.0.0.1:8765/v1`. The first message with a git URL clones and indexes it;
+later messages ask about it; the `model` field may name an indexed repo. Every answer ends with a footer: repo
+and commit, mode, tokens, seconds, and how many citations verified. Private git hosts: `GIT_TOKEN_GITLAB` or
+`GIT_TOKEN_GITHUB` in `.env`. This is the same pipeline the plugin uses, with the model call made here instead
+of by Claude Code.
+
+### MCP server for other IDEs
+
+`context-graph-mcp [<repo>]` is the stdio MCP server the plugin wraps; register it in any MCP client. For VS Code
+agent mode, a `.vscode/mcp.json` entry pointing at `.venv/bin/context-graph-mcp` with the workspace folder as the
+argument is enough.
+
+## Evaluation
+
+The claims above are measured, not assumed. `cases.json` holds questions with the files a person would have to
+open and a short rubric; the harness runs every case through the chosen modes and has `MODEL_FAST` grade each
+answer against the rubric.
 
 ```bash
-curl -s localhost:8765/v1/chat/completions -H 'Content-Type: application/json' -d '{
-  "model": "context-graph",
-  "messages": [{"role": "user", "content": "https://github.com/kubernetes-sigs/kustomize  how does a strategic merge patch get applied to a resource?"}]}'
+.venv/bin/python compare.py <repo> --show     # locators only, no model: hit@3/5 and tokens per answer
+.venv/bin/python tune.py <repo> --write       # grid-search params.json on the tuning cases, report holdout
+.venv/bin/python eval.py <repo>               # end to end: accuracy, median and worst time, tokens, per mode
 ```
 
-- Modes: `auto` (default: one cheap call on graph-selected slices, escalate to a capped tool loop only if the
-  answer hedges), `single`, `agent`, `grep-agent`. Send `/mode agent` as a message to switch, or
-  `"metadata": {"mode": "agent"}` in the request.
-- Every answer ends with a footer: repo@commit, mode, tokens, tool calls, seconds, and how many `file:line`
-  citations were verified against the checkout. The JSON response also carries `context_graph` with the tool
-  trace and files read. Transcripts land in `runs/server/`.
-- Private hosts: `GIT_TOKEN_GITLAB` / `GIT_TOKEN_GITHUB` in `.env` are injected into the clone URL for that host.
-- `POST /ingest {"url": ...}` clones/refreshes and indexes without asking anything.
-- VS Code: add the URL as an OpenAI-compatible provider (Manage Models); the model list shows each indexed repo.
+Add a case: `id`, `question`, `expected_files`, `rubric`, and `holdout: true` to keep it out of tuning.
 
-## Ask your own questions
+## How it works
 
-One question, one mode (`agent` is the default; also `grep-agent`, `single`):
+Four layers, built deterministically on every change, no model involved:
 
-```bash
-.venv/bin/python agent.py ~/tasks/ocp-tenant-provisioning "why does the quota dot never turn green" --mode agent
-.venv/bin/python agent.py ~/tasks/ocp-tenant-provisioning "why does the quota dot never turn green" --all-modes
-```
+1. **Leaves**: files and their lines. Read only in slices.
+2. **Entities and typed edges**: tree-sitter symbols for eleven languages, YAML names, document headings;
+   `defines`, `references`, `mentions`, and `shares_literal` edges from string fragments that appear in more than
+   one file, which is what links code to config to templates. Names defined in many files get no reference edges;
+   import-shaped strings are ignored.
+3. **Ranking and communities**: PageRank over files and symbols; test files rank below the code they test.
+4. **The map**: one page, about 1.2k tokens, always sent first.
 
-Interactive, with follow-ups in the same conversation:
-
-```bash
-.venv/bin/python agent.py ~/tasks/ocp-tenant-provisioning --chat --mode agent
-#   /mode single | /mode grep-agent | /mode agent    switch mode (clears history)
-#   /reset                                            clear history
-#   /quit
-```
-
-Every run writes `runs/<timestamp>/<question>-<mode>.md` (tool calls, files read, tokens, answer) and a `.json` twin.
-
-Modes:
-- `agent`: GLM gets the 1.2k-token repo map plus tools `locate`, `grep`, `read_file` and drives itself.
-- `grep-agent`: same without `locate`. The control that shows whether the graph earns its tokens.
-- `single`: the pipeline calls `locate`, reads the top three files, one completion, no tools.
-
-## Use it from VS Code agent mode instead
-
-The same tools are exposed as an MCP server (`mcp_server.py`). Already registered for the tenant repo in
-`ocp-tenant-provisioning/.vscode/mcp.json`, and a custom agent with the runner's rules lives in
-`ocp-tenant-provisioning/.github/agents/context-graph.agent.md`.
-
-1. Open `~/tasks/ocp-tenant-provisioning` in VS Code through the WSL remote (the server command is a WSL path).
-   If you open it as a Windows UNC folder instead, change `command` in `.vscode/mcp.json` to `wsl` and prepend
-   `-e /home/muhammadtalha/tasks/context-graph/.venv/bin/python` to `args`.
-2. Add your GLM in Copilot Chat: model picker -> Manage Models -> OpenAI-compatible provider, URL ending in `/v1`,
-   model id `glm-53-fp8-v10`, enter the key when prompted. If the option is missing, bring-your-own-key is disabled on
-   your Copilot plan.
-3. In the chat, pick agent mode, the `context-graph` agent, and the GLM model. VS Code starts the MCP server on demand;
-   check it under the tools icon (`locate`, `grep`, `read_file`, `repo_map`).
-
-Self-test without VS Code: `.venv/bin/python mcp_check.py ~/tasks/ocp-tenant-provisioning`.
-For another repo, register the server the same way with that repo's folder as the argument (build its locator first).
-
-## Evaluate
-
-```bash
-.venv/bin/python compare.py ~/tasks/ocp-tenant-provisioning --show    # locators only, no GLM: hit@3/5 + tokens
-.venv/bin/python tune.py ~/tasks/ocp-tenant-provisioning --write      # grid-search params.json on tuning cases
-.venv/bin/python eval.py ~/tasks/ocp-tenant-provisioning              # GLM end to end, all modes, judge, report.md
-.venv/bin/python eval.py ~/tasks/ocp-tenant-provisioning --modes agent,grep-agent --cases quota-never-ready,create-415
-```
-
-Add a case to `cases.json`: `id`, `question`, `expected_files` (what a person must open), `rubric` (two lines the judge compares against), `holdout` (true keeps it out of tuning).
+Per question: lexical seeds over bodies and symbols, one hop of spreading activation along the edges, the top
+files, slices around the matched symbols, a fixed token budget, then one model call. Citations in the answer are
+checked against the checkout by code. The model is told that the graph is a hint, that the repo may contain no
+bug, and that "cannot confirm" is an acceptable answer.
 
 ## Files
 
-- `common.py` tokeniser, BM25 index, string-literal matching, spreading activation, params
-- `graphify_locator.py` locator A: cleans graphify's graph.json, adds literal edges, `locate()`, `page()`
-- `treesitter_locator.py` locator B: tree-sitter symbols + literal edges, same interface, no LLM
-- `tools.py` the three tools, jailed to the repo
-- `agent.py` runner and CLI, `eval.py` judge and report, `compare.py` / `tune.py` locator metrics
-- `viz.py` renders a locator graph to HTML: `python viz.py <repo>/graphify-out/locator.json out.html`
+| File | Role |
+|---|---|
+| `mcp_server.py` | the tools, routing between repos, the shared store |
+| `tools.py` | read-only tools jailed to a repo, slices, citation check |
+| `treesitter_locator.py`, `common.py` | graph build, ranking, locate, deps, path |
+| `ingest.py` | clone or refresh, store layout |
+| `agent.py`, `config.py`, `server.py` | standalone runner, model settings, OpenAI-compatible endpoint |
+| `graphify_locator.py` | optional: post-processes a graphify graph if one exists |
+| `eval.py`, `compare.py`, `tune.py`, `cases.json`, `params.json` | evaluation and tuning |
+| `skills/ctx/SKILL.md`, `hooks/hooks.json`, `scripts/`, `.claude-plugin/` | the Claude Code plugin |

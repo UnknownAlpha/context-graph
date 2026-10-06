@@ -173,9 +173,9 @@ def chat(req: ChatRequest):
     if r.error and not r.answer:
         hint = ""
         if "Unauthorized" in r.error or "401" in r.error:
-            hint = (" The model endpoint rejected the token. If GLM_API_KEY=oc, the oc login in the terminal running "
-                    "server.py has probably expired: run `oc login` there and restart the server.")
-        msg = f"context-graph could not get an answer from the model ({config.GLM_MODEL}): {r.error}.{hint}"
+            hint = (" The model endpoint rejected the credentials. If MODEL_API_KEY uses a command such as "
+                    "`cmd:oc whoami -t`, that login has probably expired: renew it and restart the server.")
+        msg = f"context-graph could not get an answer from the model ({config.MODEL_NAME}): {r.error}.{hint}"
         print(f"[context-graph] {repo.slug}: {r.error}", flush=True)
         return _stream(req.model, msg) if req.stream else _completion(req.model, msg, {"error": r.error}, {})
     run_dir = HERE / "runs" / "server"
@@ -198,5 +198,5 @@ if __name__ == "__main__":
     ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
     config.require()
-    print(f"context-graph serving on http://{a.host}:{a.port}/v1  (model {config.GLM_MODEL})", flush=True)
+    print(f"context-graph serving on http://{a.host}:{a.port}/v1  (model {config.MODEL_NAME})", flush=True)
     uvicorn.run(app, host=a.host, port=a.port, log_level="info")

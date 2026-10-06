@@ -1,8 +1,8 @@
-"""Run a question against a repo with GLM.
+"""Run a question against a repo with the configured model (any OpenAI-compatible endpoint, see config.py).
 
   single      locate -> read slices of the top files -> one completion, no tools (cheapest)
   auto        single, then a capped agent loop only if the answer says it could not confirm (default for the server)
-  agent       GLM gets the repo map + tools locate/grep/read_file/deps/path and drives itself
+  agent       the model gets the repo map + tools locate/grep/read_file/deps/path and drives itself
   grep-agent  same loop without the locate tool (control: does the graph earn its tokens?)
 
 One-off:      python agent.py <repo> "<question>" --mode auto [--all-modes]
@@ -114,7 +114,7 @@ def _single(cl, repo, question, tools: Tools, r: Result, history):
     bodies = "\n\n".join(tools.read_slices(f, lines) for f, lines in hits)
     msgs = [{"role": "system", "content": system_prompt(repo)}] + _clean_history(history)
     msgs.append({"role": "user", "content": f"Problem: {question}\n\nLocator output:\n{loc}\n\n{bodies}\n\n{SINGLE_TAIL}"})
-    res = cl.chat.completions.create(model=config.GLM_MODEL, messages=msgs, extra_body=config.EXTRA_BODY)
+    res = cl.chat.completions.create(model=config.MODEL_NAME, messages=msgs, extra_body=config.EXTRA_BODY)
     _usage(res, r)
     r.steps += 1
     msg = res.choices[0].message
@@ -126,7 +126,7 @@ def _loop(cl, repo, question, tools: Tools, r: Result, history, max_steps):
     msgs = [{"role": "system", "content": system_prompt(repo)}] + _clean_history(history)
     msgs.append({"role": "user", "content": question})
     for step in range(max_steps):
-        res = cl.chat.completions.create(model=config.GLM_MODEL, messages=msgs, tools=tools.schemas(),
+        res = cl.chat.completions.create(model=config.MODEL_NAME, messages=msgs, tools=tools.schemas(),
                                          tool_choice="auto", extra_body=config.EXTRA_BODY)
         _usage(res, r)
         r.steps += 1
@@ -141,7 +141,7 @@ def _loop(cl, repo, question, tools: Tools, r: Result, history, max_steps):
                       file=sys.stderr, flush=True)
             msgs.append({"role": "tool", "tool_call_id": tc.id, "content": out})
     msgs.append({"role": "user", "content": "Stop using tools. Give your best diagnosis from what you have read."})
-    res = cl.chat.completions.create(model=config.GLM_MODEL, messages=msgs, extra_body=config.EXTRA_BODY)
+    res = cl.chat.completions.create(model=config.MODEL_NAME, messages=msgs, extra_body=config.EXTRA_BODY)
     _usage(res, r)
     r.steps += 1
     msgs.append(_assistant_dict(res.choices[0].message))
@@ -158,7 +158,7 @@ def run(repo: str, question: str, mode: str = "auto", max_steps: int = 8,
     assert mode in MODES, mode
     repo = str(Path(repo).resolve())
     cl = config.client()
-    r = Result(mode=mode, question=question, thinking=config.GLM_THINKING)
+    r = Result(mode=mode, question=question, thinking=config.THINKING)
     r.verbose = verbose
     t0 = time.time()
     tools = Tools(repo, use_locator=(mode != "grep-agent"))

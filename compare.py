@@ -1,4 +1,4 @@
-"""Run the cases in cases.json through both locators and a grep baseline. No GLM needed.
+"""Run the cases in cases.json through both locators and a grep baseline. No model needed.
 
 Usage: python compare.py <repo> [--show] [--holdout-only] [--all]
 Scores hit@3 / hit@5: did the top-N files contain every expected file?

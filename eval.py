@@ -1,4 +1,4 @@
-"""Run every case through the chosen modes, judge the answers with GLM, write a report.
+"""Run every case through the chosen modes, judge the answers with the configured model (MODEL_FAST), write a report.
 
   python eval.py <repo> [--modes agent,grep-agent,single] [--cases id1,id2] [--holdout-only] [--max-steps 8]
 """
@@ -32,7 +32,7 @@ Candidate answer:
 def judge(cl, q, rubric, answer):
     if not answer.strip():
         return 0, "no answer"
-    res = cl.chat.completions.create(model=config.GLM_MODEL, temperature=0,
+    res = cl.chat.completions.create(model=config.MODEL_FAST, temperature=0,
                                      messages=[{"role": "user", "content": JUDGE % (q, rubric, answer)}])
     txt = (res.choices[0].message.content or "").strip()
     try:
@@ -76,7 +76,7 @@ def main():
                   + (f" ERROR {r.error}" if r.error else ""), file=sys.stderr, flush=True)
     (run_dir / "results.json").write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
 
-    md = [f"# Eval {run_dir.name}", f"repo: {a.repo}  model: {config.GLM_MODEL}  thinking: {'on' if config.GLM_THINKING else 'off'}  cases: {len(cases)}", "",
+    md = [f"# Eval {run_dir.name}", f"repo: {a.repo}  model: {config.MODEL_NAME}  thinking: {'on' if config.THINKING else 'off'}  cases: {len(cases)}", "",
           "Primary metric: time to a correct answer (self-hosted model). Tokens are a GPU-capacity proxy.", "",
           "| mode | accuracy (score 2) | mean score | files hit | median s | mean s | max s | mean tokens | mean tool calls | errors |",
           "|---|---|---|---|---|---|---|---|---|---|"]
