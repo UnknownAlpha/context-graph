@@ -20,6 +20,10 @@ STOP = {"the", "and", "for", "with", "this", "that", "from", "into", "are", "not
         "before", "never", "always", "should", "must", "return", "returns", "self", "def", "var", "function"}
 
 
+DOC_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".csv", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
+MAX_DOC_BYTES = 60_000_000
+
+
 def kind_of(path: str) -> str:
     ext = Path(path).suffix.lower()
     if ext in CODE_EXT:
@@ -28,6 +32,8 @@ def kind_of(path: str) -> str:
         return "yaml"
     if ext in TEXT_EXT:
         return "text"
+    if ext in DOC_EXT:
+        return "doc"
     return ""
 
 
@@ -38,10 +44,11 @@ def iter_files(root: str):
         for f in filenames:
             p = Path(dirpath) / f
             rel = p.relative_to(root).as_posix()
-            if not kind_of(rel) or f.endswith((".min.js", ".lock", "-lock.json")):
+            kind = kind_of(rel)
+            if not kind or f.endswith((".min.js", ".lock", "-lock.json")):
                 continue
             try:
-                if p.stat().st_size > MAX_FILE_BYTES:
+                if p.stat().st_size > (MAX_DOC_BYTES if kind == "doc" else MAX_FILE_BYTES):
                     continue
             except OSError:
                 continue
@@ -49,6 +56,13 @@ def iter_files(root: str):
 
 
 def read(root: str, rel: str) -> str:
+    """File text; for documents and images, the cached extracted text (see documents.py)."""
+    if kind_of(rel) == "doc":
+        try:
+            import documents
+            return documents.read_document(str(root), rel)
+        except Exception:  # noqa: BLE001
+            return ""
     try:
         return (Path(root) / rel).read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -103,6 +117,9 @@ def literal_fragments(text: str, kind: str):
         cands += [next(g for g in m.groups() if g is not None) for m in _STR.finditer(text)]
     else:
         cands += re.findall(r"`([^`\n]{4,})`", text)
+        if kind == "doc":
+            # extracted documents have no code quoting: take structured tokens (hostnames, paths, ids, env names)
+            cands += re.findall(r"\b[A-Za-z0-9][A-Za-z0-9_.-]*(?:[./:_-][A-Za-z0-9_.-]+)+\b", text)
     for c in cands:
         for piece in _PLACEHOLDER.split(c):
             piece = piece.strip(" \t'\"`,;:")
@@ -128,7 +145,7 @@ def literal_edges(texts: dict, min_len: int = 5, max_share: float = 0.2, max_fil
             if len(f) >= min_len and not _IMPORTY.match(f):
                 owners[f].add(rel)
     n = max(1, len(texts))
-    cap = max(2, min(max_files, int(n * max_share)))
+    cap = max(3, min(max_files, int(n * max_share)))
     edges = []
     for frag, files in owners.items():
         if 1 < len(files) <= cap:

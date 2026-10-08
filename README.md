@@ -53,6 +53,43 @@ there) and the tools route to it. Every tool result starts with `[repo: <slug>]`
 
 A project's attachments are recorded in `.ctx/registry.json`, which ignores itself in git.
 
+### Documents, images and scans
+
+Documents are corpora too. PDF, DOCX, PPTX, XLSX, CSV and image files inside any indexed folder are extracted
+to text once, cached under `.repomap/text/` by content hash, and treated like any other file: searchable,
+sliceable, citable. A single file or a zip can be ingested directly:
+
+```
+/ctx ingest ~/Downloads/dr-runbook.pdf
+/ctx @dr-runbook what is the failover order and how long does each step take?
+/ctx ingest ~/Desktop/design-docs.zip
+```
+
+What is read from each format:
+
+| Format | Text | Structure | Images |
+|---|---|---|---|
+| PDF with a text layer | yes | page markers, heading heuristics | embedded images via OCR |
+| Scanned PDF | OCR, page by page | page markers | the page itself is the image |
+| DOCX | paragraphs, tables | heading styles | embedded images via OCR |
+| PPTX | titles, bullets, notes | slide markers | pictures via OCR |
+| XLSX, CSV | rows | sheet names | none |
+| PNG, JPG, WEBP, TIFF | OCR | none | the file itself |
+
+OCR runs locally with RapidOCR (ONNX, pip-installed, no system packages) and only where there is no text layer, so
+clean documents cost nothing extra. Citations point into the extracted text, `dr-runbook.pdf:120`, with page
+markers inline so the reader can find the page; the citation checker verifies them against the cache.
+
+What OCR cannot do is say what a chart or diagram shows. That needs a vision-capable model, and the choice is the
+user's: set `MODEL_VISION_NAME` (plus `MODEL_VISION_BASE_URL` and `MODEL_VISION_API_KEY` if different from the main
+model) in `.env`, and the standalone server and CLI describe each figure once after ingest, cache the description
+by image hash, and insert it as a `[caption]` line marked as model output. Unset, figures keep their OCR text and
+nothing is invented about them. The Claude Code plugin never calls a vision model; it reads captions only if the
+standalone tools produced them. Values read off a chart by a model are reported as approximate.
+
+Install the extraction dependencies with the `docs` extra: `uv pip install -e ".[server,docs]"`. The plugin
+launcher installs them by default; `/ctx index_status` reports whether documents and OCR are available.
+
 ### Permissions
 
 Tools: `context_pack`, `locate`, `read_file`, `grep`, `deps`, `path`, `repo_map`, `index_status`, `targets`,

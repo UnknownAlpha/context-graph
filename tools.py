@@ -56,7 +56,9 @@ class Tools:
         p = Path(self.repo, rel)
         if not p.is_file():
             return f"no such file: {rel}"
-        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = read(self.repo, rel).splitlines()   # documents: extracted text, page markers inline
+        if not lines:
+            return f"{rel}: no readable text (unsupported format, or extraction/OCR found nothing)"
         start = max(1, int(start or 1))
         end = min(len(lines), int(end)) if end else len(lines)
         body = [f"{i}: {lines[i - 1]}" for i in range(start, end + 1)]
@@ -72,8 +74,10 @@ class Tools:
         rel = self._safe(path)
         if rel is None or not Path(self.repo, rel).is_file():
             return f"no such file: {path}"
-        lines = Path(self.repo, rel).read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = read(self.repo, rel).splitlines()
         n = len(lines)
+        if n == 0:
+            return f"{rel}: no readable text"
         if est_tokens("\n".join(lines)) <= max_tokens or not around_lines:
             return self.read_file(rel, 1, n, max_tokens)
         spans = sorted((max(1, l - SLICE_MARGIN), min(n, l + SLICE_MARGIN)) for l in around_lines if l)
@@ -189,7 +193,7 @@ def check_citations(repo: str, answer: str):
                 # allow bare basenames the model shortened, e.g. app.py:286
                 cands = [r for r in iter_files(repo) if r.endswith("/" + rel) or r == rel]
                 p = Path(repo, cands[0]) if len(cands) == 1 else None
-            files[rel] = len(p.read_text(encoding="utf-8", errors="replace").splitlines()) if p and p.is_file() else -1
+            files[rel] = len(read(repo, str(p.relative_to(repo))).splitlines()) if p and p.is_file() else -1
         n = files[rel]
         (ok if 0 < line <= n else bad).append(f"{rel}:{line}")
     return ok, bad

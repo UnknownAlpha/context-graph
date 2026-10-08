@@ -94,6 +94,22 @@ def ingest(url_or_path: str, branch: str = None) -> Repo:
     refreshed = False
     if local.is_dir():
         path, url, cloned = local.resolve(), str(local), False
+    elif local.is_file():
+        # a single document or an archive: copy/extract into a workspace so it is indexed like any corpus
+        import shutil
+        import zipfile
+        slug = re.sub(r"[^a-z0-9._-]+", "-", local.stem.lower()).strip("-")[:80] or "file"
+        path = WORKSPACES / slug
+        path.mkdir(parents=True, exist_ok=True)
+        if local.suffix.lower() == ".zip":
+            with zipfile.ZipFile(local) as z:
+                for m in z.infolist():
+                    if m.filename.startswith("/") or ".." in Path(m.filename).parts:
+                        continue
+                    z.extract(m, path)
+        else:
+            shutil.copy2(local, path / local.name)
+        url, cloned, refreshed = str(local), False, True
     else:
         url = url_or_path
         path = WORKSPACES / slug_for(url)

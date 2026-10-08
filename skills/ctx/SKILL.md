@@ -40,3 +40,6 @@ Rules:
   causes (cluster state, timing, credentials, environment) and stop.
 - If the pack lacks what is needed and the extra calls do not find it, say `cannot confirm: <what>`.
 - Anything from general knowledge rather than the repo is labelled as such.
+- Documents (PDF, DOCX, PPTX, XLSX, images) appear as extracted text with `# [page n]` and `[figure id]` markers;
+  cite them as `file:line` like any file and mention the page when a marker is nearby. A `[caption]` line is a
+  model's description of an image, not text from the page: treat numbers in it as approximate and say so.

@@ -93,6 +93,15 @@ def _question_and_history(req: ChatRequest):
     return q, hist
 
 
+def _caption(path: str) -> dict:
+    """Describe figures with the user's vision model if one is configured; otherwise OCR text only."""
+    try:
+        import vision
+        return vision.describe_figures(path)
+    except Exception as e:  # noqa: BLE001
+        return {"captioned": 0, "error": f"{type(e).__name__}: {e}"}
+
+
 def _footer(r: agent.Result, repo: ingest.Repo) -> str:
     cit = f"{len(r.citations_ok)} citations verified" + (f", {len(r.citations_bad)} NOT found: {', '.join(r.citations_bad[:4])}" if r.citations_bad else "")
     return (f"\n\n— context-graph: {repo.slug}@{repo.commit} | mode {r.mode}{' -> agent' if r.escalated else ''} | "
@@ -143,8 +152,9 @@ def ingest_ep(req: IngestRequest):
             r = ingest.ingest(req.url, req.branch)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(400, f"ingest failed: {e}")
+        figs = _caption(r.path)
     _REPOS[r.slug] = r
-    return r.__dict__
+    return {**r.__dict__, "figures": figs}
 
 
 @app.post("/v1/chat/completions")
@@ -165,9 +175,11 @@ def chat(req: ChatRequest):
             msg = f"Could not clone or index {target}: {e}"
             return _stream(req.model, msg) if req.stream else _completion(req.model, msg, {"error": str(e)}, {})
         _REPOS[repo.slug] = repo
+        figs = _caption(repo.path) if (repo.cloned or repo.refreshed) else {}
         if not question:
             msg = (f"Indexed {repo.slug} at {repo.commit} ({repo.branch}): {repo.files} files, {repo.symbols} symbols, "
-                   f"{repo.built_s}s. Ask a question about it. Modes: /mode single|auto|agent|grep-agent (current: {mode}).")
+                   f"{repo.built_s}s. Figures described: {figs.get('captioned', 0)}. "
+                   f"Ask a question about it. Modes: /mode single|auto|agent|grep-agent (current: {mode}).")
             return _stream(req.model, msg) if req.stream else _completion(req.model, msg, repo.__dict__, {})
         r = agent.run(repo.path, question, mode, messages=history, verbose=False)
     if r.error and not r.answer:

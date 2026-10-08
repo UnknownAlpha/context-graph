@@ -20,6 +20,12 @@ OpenAI-compatible model. README.md is the user-facing description; this file is 
   projects attach via `.ctx/registry.json`. Nothing is sticky: every tool takes `repo`.
 - Model settings for standalone use come from `config.py` (`MODEL_*`, with `GLM_*` and `ANTHROPIC_*` fallbacks).
   The plugin itself never calls a model.
+- Documents (`documents.py`): PDF/DOCX/PPTX/XLSX/CSV/images are extracted once to `.repomap/text/<hash>.txt` with
+  `# [page n]`, `## heading` and `[figure id]` marker lines; `common.read()` returns that text for `kind == "doc"`,
+  so every tool, the citation checker and the literal pass see documents as plain files. OCR (RapidOCR) only on
+  pages without a text layer and on embedded images. Figure captions (`vision.py`) are standalone-only, require
+  `MODEL_VISION_NAME`, are cached by image hash and inserted as `[caption] (model description, inferred) ...`.
+  `tests/doc_check.py` builds real fixtures and must pass.
 
 ## Verify before committing
 

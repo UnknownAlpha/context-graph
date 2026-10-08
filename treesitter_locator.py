@@ -98,6 +98,8 @@ def extract(rel: str, text: str):
     defs, refs = {}, Counter()
     parser = _parser(lang) if lang else None
     if parser is None:
+        if kind_of(rel) in ("text", "doc"):
+            defs.update(_heading_defs(text))
         return defs, refs
     src = _source_for(rel, text).encode()
     tree = parser.parse(src)
@@ -122,6 +124,23 @@ def extract(rel: str, text: str):
             if name not in COMMON_NAMES and len(name) > 2:
                 refs[name] += 1
     return defs, refs
+
+
+_HEADING = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
+
+
+def _heading_defs(text: str) -> dict:
+    """Markdown and extracted-document headings as symbols: name -> first line. Page markers are skipped."""
+    out = {}
+    for i, ln in enumerate(text.splitlines(), 1):
+        m = _HEADING.match(ln)
+        if not m:
+            continue
+        name = m.group(2).strip()
+        if name.startswith("[") or len(name) < 3 or len(name) > 120:
+            continue
+        out.setdefault(name, i)
+    return out
 
 
 _YAML_NAME = re.compile(r"^\s*(?:-\s+)?(?:name|secretName|serviceAccountName|configMap|image|path|host):\s*[\"']?([A-Za-z0-9_.\-/{}$ ]+?)[\"']?\s*(?:#.*)?$", re.M)

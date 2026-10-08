@@ -1,6 +1,6 @@
 [project]
 name = "context-graph"
-version = "0.1.0"
+version = "0.2.0"
 description = "Knowledge-graph context pipeline for repositories: locate, slice, verify. MCP server, CLI and OpenAI-compatible endpoint."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 server = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+# documents: PDF/DOCX/PPTX/XLSX text extraction plus local OCR for scans and images (pip-only, no system binaries)
+docs = ["pypdf>=4.0", "pypdfium2>=4.0", "python-docx>=1.1", "python-pptx>=0.6", "openpyxl>=3.1",
+        "rapidocr-onnxruntime>=1.3", "pillow>=10.0"]
 
 [project.scripts]
 context-graph-mcp = "mcp_server:main"
@@ -29,7 +32,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 include = [
-    "agent.py", "common.py", "config.py", "eval.py", "graphify_locator.py", "ingest.py",
+    "agent.py", "common.py", "config.py", "documents.py", "vision.py", "eval.py", "graphify_locator.py", "ingest.py",
     "mcp_server.py", "server.py", "tools.py", "treesitter_locator.py", "tune.py", "compare.py",
     "params.json", "cases.json",
 ]

@@ -15,6 +15,9 @@ Together, Groq, llama.cpp server, ... Settings come from the environment or from
                    {"reasoning_effort":"low"}                           (OpenAI-style reasoning)
                    {"think":false}                                      (Ollama)
   MODEL_TIMEOUT    seconds, default 120.   MODEL_VERIFY_TLS  1/0, default 1.
+  MODEL_VISION_NAME, MODEL_VISION_BASE_URL, MODEL_VISION_API_KEY, MODEL_VISION_MAX_FIGURES
+                   optional vision-capable model used by the standalone tools to describe figures in documents
+                   (see vision.py). Unset = figures get OCR text only.
 
 Fallbacks, so existing setups keep working: GLM_* names (older .env files) and Claude Code's ANTHROPIC_BASE_URL /
 ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL when the base URL is a proxy such as LiteLLM

@@ -298,12 +298,17 @@ def index_status(repo: str = "") -> str:
     B.ensure_built(root)
     p = Path(root, ".repomap", "map.json")
     built = time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)) if p.exists() else "never"
-    return json.dumps({"repo": slug, "path": root, "built": built, **B.stats(root)}, indent=1)
+    import documents
+    from common import kind_of
+    docs = [r for r in iter_files(root) if kind_of(r) == "doc"]
+    return json.dumps({"repo": slug, "path": root, "built": built, **B.stats(root),
+                       "documents": len(docs), **documents.status()}, indent=1)
 
 
 @mcp.tool(**RW)
 def ingest(url: str, branch: str = "", local: bool = False) -> str:
-    """Make a git repository available to this project and add it to targets(). Clones go to a per-user store
+    """Make a git repository, a local folder, a single document (PDF, DOCX, PPTX, XLSX, image) or a zip available to
+    this project and add it to targets(). Clones go to a per-user store
     shared by every project on this machine, so a URL is cloned once and only fetched afterwards; `local=true`
     clones into <project>/.ctx/workspaces instead, for a fully self-contained project. A local directory path
     is indexed in place and attached without copying. Does not change the default repo: pass the slug as
