@@ -6,7 +6,7 @@
     {
       "name": "context-graph",
       "source": "./",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "One tool call returns a budgeted context pack for the current repo: map, ranked files, sliced reads, graph queries."
     }
   ]

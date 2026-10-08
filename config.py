@@ -16,8 +16,13 @@ Together, Groq, llama.cpp server, ... Settings come from the environment or from
                    {"think":false}                                      (Ollama)
   MODEL_TIMEOUT    seconds, default 120.   MODEL_VERIFY_TLS  1/0, default 1.
   MODEL_VISION_NAME, MODEL_VISION_BASE_URL, MODEL_VISION_API_KEY, MODEL_VISION_MAX_FIGURES
-                   optional vision-capable model used by the standalone tools to describe figures in documents
-                   (see vision.py). Unset = figures get OCR text only.
+                   optional vision-capable model that describes figures in documents (see vision.py), used by
+                   the standalone tools and by the plugin alike. Unset = figures get OCR text only.
+  MODEL_OCR_NAME, MODEL_OCR_BASE_URL, MODEL_OCR_API_KEY
+                   optional model that replaces RapidOCR for reading text out of images and scanned pages.
+
+Settings files, in order (first definition wins, environment first): $CONTEXT_GRAPH_ENV,
+~/.config/context-graph/.env, then .env next to this file. Plugin users put theirs in ~/.config/context-graph/.env.
 
 Fallbacks, so existing setups keep working: GLM_* names (older .env files) and Claude Code's ANTHROPIC_BASE_URL /
 ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL when the base URL is a proxy such as LiteLLM
@@ -30,16 +35,31 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
+def env_files():
+    """Where settings are read from, first wins over later: the process environment, then
+    $CONTEXT_GRAPH_ENV, then ~/.config/context-graph/.env (the place for plugin users, since the plugin
+    folder is replaced on update), then .env next to the code (standalone checkouts)."""
+    out = []
+    if os.environ.get("CONTEXT_GRAPH_ENV"):
+        out.append(Path(os.environ["CONTEXT_GRAPH_ENV"]).expanduser())
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    out.append(xdg / "context-graph" / ".env")
+    out.append(HERE / ".env")
+    return out
+
+
 def _load_env():
-    p = HERE / ".env"
-    if not p.exists() or os.environ.get("CONTEXT_GRAPH_SKIP_DOTENV"):
+    if os.environ.get("CONTEXT_GRAPH_SKIP_DOTENV"):
         return
-    for ln in p.read_text(encoding="utf-8").splitlines():
-        ln = ln.strip()
-        if not ln or ln.startswith("#") or "=" not in ln:
+    for p in env_files():
+        if not p.is_file():
             continue
-        k, v = ln.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#") or "=" not in ln:
+                continue
+            k, v = ln.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 _load_env()

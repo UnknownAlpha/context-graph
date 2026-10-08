@@ -56,7 +56,7 @@ class Tools:
         p = Path(self.repo, rel)
         if not p.is_file():
             return f"no such file: {rel}"
-        lines = read(self.repo, rel).splitlines()   # documents: extracted text, page markers inline
+        lines = read(self.repo, rel, full=True).splitlines()   # documents: extracted text; images OCR'd on demand
         if not lines:
             return f"{rel}: no readable text (unsupported format, or extraction/OCR found nothing)"
         start = max(1, int(start or 1))
@@ -74,7 +74,7 @@ class Tools:
         rel = self._safe(path)
         if rel is None or not Path(self.repo, rel).is_file():
             return f"no such file: {path}"
-        lines = read(self.repo, rel).splitlines()
+        lines = read(self.repo, rel, full=True).splitlines()
         n = len(lines)
         if n == 0:
             return f"{rel}: no readable text"

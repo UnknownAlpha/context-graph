@@ -36,7 +36,8 @@ the question, and numbered slices around the matched symbols in the top three, i
 from that with `file:line` citations and reads more only if something is missing. `path` and `deps` answer "how
 does A reach B" and "what depends on X" from the graph directly. The index lives in `.repomap/` inside the
 project (add it to `.gitignore`) and rebuilds itself when files change. Nothing leaves the machine except the
-prompt Claude Code sends to its model.
+prompt Claude Code sends to its model, and figure images sent to a vision or OCR model only if the user
+configured one (see Documents below).
 
 ### Several repos at once
 
@@ -67,34 +68,51 @@ sliceable, citable. A single file or a zip can be ingested directly:
 
 What is read from each format:
 
-| Format | Text | Structure | Images |
+| Format | Text | Structure | Figures |
 |---|---|---|---|
-| PDF with a text layer | yes | page markers, heading heuristics | embedded images via OCR |
-| Scanned PDF | OCR, page by page | page markers | the page itself is the image |
-| DOCX | paragraphs, tables | heading styles | embedded images via OCR |
-| PPTX | titles, bullets, notes | slide markers | pictures via OCR |
+| PDF with a text layer | yes | page markers, heading heuristics | embedded images and vector charts/diagrams, cropped from the page |
+| Scanned PDF | OCR, page by page | page markers | the page itself is the figure |
+| DOCX | paragraphs, tables | heading styles | embedded images |
+| PPTX | titles, bullets, notes | slide markers | pictures |
 | XLSX, CSV | rows | sheet names | none |
 | PNG, JPG, WEBP, TIFF | OCR | none | the file itself |
 
-OCR runs locally with RapidOCR (ONNX, pip-installed, no system packages) and only where there is no text layer, so
-clean documents cost nothing extra. Citations point into the extracted text, `dr-runbook.pdf:120`, with page
-markers inline so the reader can find the page; the citation checker verifies them against the cache.
+Every figure gets a `[figure id]` marker in the text, followed by the text OCR could read from it, and its PNG is
+kept in the cache. On PDF pages figures are found from the page's drawing objects, so a bar chart drawn as vectors
+is cropped together with its axis labels, not only pasted bitmaps. Citations point into the extracted text,
+`dr-runbook.pdf:120`, with page markers inline so the reader can find the page; the citation checker verifies
+them against the cache.
 
-What OCR cannot do is say what a chart or diagram shows. That needs a vision-capable model, and the choice is the
-user's: set `MODEL_VISION_NAME` (plus `MODEL_VISION_BASE_URL` and `MODEL_VISION_API_KEY` if different from the main
-model) in `.env`, and the standalone server and CLI describe each figure once after ingest, cache the description
-by image hash, and insert it as a `[caption]` line marked as model output. Unset, figures keep their OCR text and
-nothing is invented about them. The Claude Code plugin never calls a vision model; it reads captions only if the
-standalone tools produced them. Values read off a chart by a model are reported as approximate.
+**Reading text out of figures: OCR.** The default is RapidOCR, which runs locally from pip with no GPU, no system
+packages and no network, so a plain install handles scans and screenshots. Users with a stronger OCR available
+can route the image through their own model instead by setting `MODEL_OCR_NAME` (and `MODEL_OCR_BASE_URL` /
+`MODEL_OCR_API_KEY` if they differ): a document model such as PaddleOCR-VL, or a general vision model such as
+Qwen3-VL, behind any OpenAI-compatible endpoint. Lines read that way are labelled `OCR text (model):`, and
+RapidOCR takes over if the call fails.
+
+**Understanding figures: captions.** OCR cannot say what a chart or diagram shows. For that the user names a
+vision-capable model with `MODEL_VISION_NAME` (plus `MODEL_VISION_BASE_URL` and `MODEL_VISION_API_KEY` if they
+differ from `MODEL_*`). When it is set, every figure is described once, on first extraction, cached by image
+hash and inserted as a `[caption] (model description, inferred) ...` line, so the reader always knows which text
+came from the page and which from a model, and numbers read off a chart are reported as approximate. Unset,
+figures keep their OCR text and nothing is invented about them. This applies to the plugin and the standalone
+tools alike: the plugin never picks a model on its own, it only uses the one the user configured.
+
+Where to set these: plugin users put them in `~/.config/context-graph/.env` (a `CONTEXT_GRAPH_ENV` variable can
+point elsewhere), or export them in the shell that starts Claude Code; standalone checkouts use `.env` next to the
+code. `/ctx index_status` shows the active OCR engine, the caption model, how many figures are captioned or
+pending, and which settings files were read. `/ctx caption` describes pending figures, for documents extracted
+before the model was configured or when an ingest hit its time budget (`MODEL_VISION_BUDGET_S`, 150 s by default).
 
 Install the extraction dependencies with the `docs` extra: `uv pip install -e ".[server,docs]"`. The plugin
-launcher installs them by default; `/ctx index_status` reports whether documents and OCR are available.
+launcher installs them by default.
 
 ### Permissions
 
 Tools: `context_pack`, `locate`, `read_file`, `grep`, `deps`, `path`, `repo_map`, `index_status`, `targets`,
-`ingest`, `forget`, `prune`. All but the last three only read. The plugin ships a hook that pre-approves the
-read-only tools. If Claude Code's auto mode still blocks one, allow the server once under `/permissions`:
+`ingest`, `forget`, `prune`, `caption`. All but the last four only read; `caption` sends figure images to the model
+the user configured, nowhere else. The plugin ships a hook that pre-approves the read-only tools. If Claude Code's
+auto mode still blocks one, allow the server once under `/permissions`:
 
 ```
 mcp__plugin_context-graph_context-graph

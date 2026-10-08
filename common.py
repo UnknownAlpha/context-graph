@@ -55,12 +55,13 @@ def iter_files(root: str):
             yield rel
 
 
-def read(root: str, rel: str) -> str:
-    """File text; for documents and images, the cached extracted text (see documents.py)."""
+def read(root: str, rel: str, full: bool = False) -> str:
+    """File text; for documents and images, the cached extracted text (see documents.py).
+    full=True means a tool is opening this file: an image the build skipped under the image policy is read now."""
     if kind_of(rel) == "doc":
         try:
             import documents
-            return documents.read_document(str(root), rel)
+            return documents.read_document(str(root), rel, full=full)
         except Exception:  # noqa: BLE001
             return ""
     try:

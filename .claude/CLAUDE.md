@@ -19,13 +19,19 @@ OpenAI-compatible model. README.md is the user-facing description; this file is 
   (the index). Clones live once per user in `~/.local/share/context-graph/workspaces` (or `$CONTEXT_GRAPH_STORE`);
   projects attach via `.ctx/registry.json`. Nothing is sticky: every tool takes `repo`.
 - Model settings for standalone use come from `config.py` (`MODEL_*`, with `GLM_*` and `ANTHROPIC_*` fallbacks).
-  The plugin itself never calls a model.
+  The plugin never calls a chat model (Claude Code supplies it) and never chooses a model on its own; it calls a
+  vision or OCR model only when the user configured `MODEL_VISION_NAME` / `MODEL_OCR_NAME`.
 - Documents (`documents.py`): PDF/DOCX/PPTX/XLSX/CSV/images are extracted once to `.repomap/text/<hash>.txt` with
   `# [page n]`, `## heading` and `[figure id]` marker lines; `common.read()` returns that text for `kind == "doc"`,
-  so every tool, the citation checker and the literal pass see documents as plain files. OCR (RapidOCR) only on
-  pages without a text layer and on embedded images. Figure captions (`vision.py`) are standalone-only, require
-  `MODEL_VISION_NAME`, are cached by image hash and inserted as `[caption] (model description, inferred) ...`.
-  `tests/doc_check.py` builds real fixtures and must pass.
+  so every tool, the citation checker and the literal pass see documents as plain files. Figures: DOCX/PPTX
+  embedded pictures, scanned PDF pages, and on text-layer PDF pages the images and vector drawings found via
+  pdfium page objects (`_page_figure_boxes`, cropped from a page render so labels come along). OCR on every
+  figure: RapidOCR by default, or the user's `MODEL_OCR_NAME` (lines labelled `OCR text (model):`, RapidOCR
+  fallback). Captions (`vision.py`) run in the plugin and standalone alike but only when the user set
+  `MODEL_VISION_NAME`; they run at extraction time within `MODEL_VISION_BUDGET_S`, are cached by figure hash in
+  `.repomap/text/captions.json`, inserted as `[caption] (model description, inferred) ...`, and the `caption` tool
+  continues pending ones. Settings files: `$CONTEXT_GRAPH_ENV`, `~/.config/context-graph/.env`, then `./.env`
+  (`config.env_files()`). `tests/doc_check.py` builds real fixtures plus a fake OpenAI server and must pass.
 
 ## Verify before committing
 

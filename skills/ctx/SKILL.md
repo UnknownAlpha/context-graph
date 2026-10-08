@@ -1,7 +1,7 @@
 ---
 name: ctx
 description: Answer questions about the current repository, or any repo ingested in this project, using its knowledge graph. Use for "why does X fail", "where is Y", "how does A reach B", "what breaks if I change Z", "what is this project", or any request to understand or diagnose a codebase. One tool call returns the map, the files that matter and sliced reads; answer from that with file:line citations.
-argument-hint: "[@repo] <question>  |  ingest <git url or local path>  |  targets"
+argument-hint: "[@repo] <question>  |  ingest <git url, path, document or zip>  |  targets  |  caption [file]"
 ---
 Answer `$ARGUMENTS` using the context-graph MCP tools.
 
@@ -19,7 +19,10 @@ Procedure:
 1. If the argument is `targets` or `targets all`, call `targets` (with `all=true` for the second) and show the
    table. `ingest <url or path>` → call `ingest` and report what was indexed, its slug, and whether it was cloned
    or already cached. `forget <slug>` → call `forget`. `prune` → call `prune` (dry run) and show the list;
-   `prune apply` → call `prune` with `apply=true`. Stop after any of these.
+   `prune apply` → call `prune` with `apply=true`. `caption [file]` → call `caption` (with `repo` if `@slug`
+   was given) and report how many figures were described, or that no vision model is configured and where to
+   set `MODEL_VISION_NAME` (`~/.config/context-graph/.env`). `index_status` → call it and show the result,
+   including the `ocr`, `captions` and `figures` fields. Stop after any of these.
 2. Call `context_pack` with the question (and `repo` if given). It returns the one-page map, the files the graph
    ranked highest, and numbered slices of the top three around the matched symbols, within a token budget.
 3. For "how does A reach B" also call `path`; for "what breaks if I change X" also call `deps`.
@@ -41,5 +44,8 @@ Rules:
 - If the pack lacks what is needed and the extra calls do not find it, say `cannot confirm: <what>`.
 - Anything from general knowledge rather than the repo is labelled as such.
 - Documents (PDF, DOCX, PPTX, XLSX, images) appear as extracted text with `# [page n]` and `[figure id]` markers;
-  cite them as `file:line` like any file and mention the page when a marker is nearby. A `[caption]` line is a
-  model's description of an image, not text from the page: treat numbers in it as approximate and say so.
+  cite them as `file:line` like any file and mention the page when a marker is nearby. The lines after a figure
+  marker are OCR text read from the image. A `[caption]` line is a model's description of the image, not text
+  from the page: treat numbers in it as approximate and say so. If a question is about a chart or diagram and
+  its figure has OCR text but no `[caption]`, say that the figure has not been described and that `/ctx caption`
+  with a configured vision model would add a description; do not guess what the chart shows.

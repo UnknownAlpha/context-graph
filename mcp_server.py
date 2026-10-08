@@ -10,7 +10,8 @@ Tools:
   targets()                      indexed repos: slug, path, commit, files
   context_pack(question, repo)   one call: map + ranked files + sliced reads, within a token budget (use first)
   locate / read_file / grep / deps / path / repo_map / index_status   all take `repo`
-  ingest(url)                    clone into .ctx/workspaces and register; does not change any default
+  ingest(url)                    clone into the shared store and register; does not change any default
+  caption(repo, file)            describe figures with the user's vision model (MODEL_VISION_NAME), if configured
 """
 import json
 import os
@@ -42,6 +43,7 @@ except Exception:  # noqa: BLE001  older SDK without annotations
     RO = RW = {}
 
 import agent  # noqa: E402
+import config  # noqa: E402
 import treesitter_locator as B  # noqa: E402
 from common import est_tokens, iter_files, tokens  # noqa: E402
 from tools import Tools  # noqa: E402
@@ -299,10 +301,48 @@ def index_status(repo: str = "") -> str:
     p = Path(root, ".repomap", "map.json")
     built = time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)) if p.exists() else "never"
     import documents
+    import vision
     from common import kind_of
     docs = [r for r in iter_files(root) if kind_of(r) == "doc"]
-    return json.dumps({"repo": slug, "path": root, "built": built, **B.stats(root),
-                       "documents": len(docs), **documents.status()}, indent=1)
+    out = {"repo": slug, "path": root, "built": built, **B.stats(root), "documents": len(docs), **documents.status()}
+    if docs:
+        pol = documents.image_policy(root)
+        if pol["images"]:
+            out["images"] = pol["images"]
+            if not pol["ocr_at_build"]:
+                out["images_note"] = (f"more than {pol['limit']} image files: listed by name, read (OCR, caption) when a tool opens "
+                                      "one; raise CONTEXT_GRAPH_MAX_IMAGES to read all at build")
+        out["figures"] = vision.pending(root)
+        if out["figures"]["pending"] and vision.configured():
+            out["figures"]["hint"] = "call caption() to describe the pending figures with the configured vision model"
+    out["settings_from"] = [str(p) for p in config.env_files() if p.is_file()] or ["environment only"]
+    return json.dumps(out, indent=1)
+
+
+@mcp.tool(**RW)
+def caption(repo: str = "", file: str = "") -> str:
+    """Describe the figures (charts, diagrams, images) in a repo's documents with the vision model the user
+    configured (MODEL_VISION_NAME in the environment or ~/.config/context-graph/.env). Captions are cached per figure
+    and inserted into the extracted text as `[caption] (model description, inferred) ...`. Runs automatically when
+    documents are first extracted if the model is configured; call this to caption documents extracted earlier,
+    to continue after a time budget ran out, or for one `file`. Without a configured model it reports that and
+    changes nothing."""
+    import vision
+    slug, root = _resolve(repo)
+    why = _guard(root)
+    if why:
+        return why
+    if not vision.configured():
+        return (_tag(slug) + " no vision model configured: figures keep their OCR text. Set MODEL_VISION_NAME "
+                "(and MODEL_VISION_BASE_URL / MODEL_VISION_API_KEY if they differ from MODEL_*) in "
+                f"{config.env_files()[-2]} or the environment, then restart Claude Code.")
+    rel = file.strip().lstrip("./") if file else None
+    r = vision.describe_figures(root, rel)
+    _TOOLS.pop(root, None)                      # extracted text changed; reopen tools so reads see captions
+    tail = ""
+    if r.get("pending"):
+        tail = f" {r['pending']} figure(s) still pending (time budget); call caption() again to continue."
+    return _tag(slug) + f" captioned {r.get('captioned', 0)} figure(s) with {r.get('model')} in {r.get('seconds', 0)}s." + tail
 
 
 @mcp.tool(**RW)
@@ -335,8 +375,20 @@ def ingest(url: str, branch: str = "", local: bool = False) -> str:
     _TOOLS.pop(r.path, None)
     how = "cloned" if r.cloned else ("refreshed, new commits" if r.refreshed else "already cached, unchanged")
     where = "shared store" if in_store else ("project-local" if local else "in place")
+    figs = ""
+    try:
+        import vision
+        pend = vision.pending(r.path)
+        if pend["figures"]:
+            if vision.configured():
+                figs = (f" Figures: {pend['captioned']}/{pend['figures']} captioned by {os.environ.get('MODEL_VISION_NAME')}"
+                        + (f", {pend['pending']} pending (call caption() to continue)." if pend["pending"] else "."))
+            else:
+                figs = f" Figures: {pend['figures']} with OCR text only (no vision model configured)."
+    except Exception:  # noqa: BLE001
+        pass
     return (f"Indexed {r.slug} at {r.commit} ({r.branch}): {r.files} files, {r.symbols} symbols in {r.built_s}s "
-            f"({how}, {where}). Use repo=\"{r.slug}\" (or @{r.slug} in /ctx) to ask about it; the current project "
+            f"({how}, {where}).{figs} Use repo=\"{r.slug}\" (or @{r.slug} in /ctx) to ask about it; the current project "
             f"stays the default.\n\n" + targets())
 
 
